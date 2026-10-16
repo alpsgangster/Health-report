@@ -4,7 +4,7 @@
 
 [中文说明](README.md) ｜ English
 
-[![CI](https://github.com/alpsgangster/health-report/actions/workflows/ci.yml/badge.svg)](https://github.com/alpsgangster/health-report/actions/workflows/ci.yml)
+[![CI](https://github.com/alpsgangster/Health-report/actions/workflows/ci.yml/badge.svg)](https://github.com/alpsgangster/Health-report/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#install)
@@ -144,10 +144,10 @@ The core has **zero third-party dependencies**; the standard library is enough.
 
 ```bash
 # Recommended: install from git into an isolated environment
-pipx install "git+https://github.com/alpsgangster/health-report"
+pipx install "git+https://github.com/alpsgangster/Health-report"
 
 # Or clone it and run it directly, installing nothing
-git clone https://github.com/alpsgangster/health-report
+git clone https://github.com/alpsgangster/Health-report
 cd health-report
 PYTHONPATH=src python -m health_report demo
 ```
@@ -167,7 +167,7 @@ Optional accelerator: for Apple's multi-GB `export.xml`, `lxml` is several times
 **It runs without it too** (falling back to the standard library):
 
 ```bash
-pipx install "health-report[fast] @ git+https://github.com/alpsgangster/health-report"
+pipx install "health-report[fast] @ git+https://github.com/alpsgangster/Health-report"
 ```
 
 ---

@@ -4,7 +4,7 @@
 
 [English](README.en.md) ｜ 中文说明
 
-[![CI](https://github.com/alpsgangster/health-report/actions/workflows/ci.yml/badge.svg)](https://github.com/alpsgangster/health-report/actions/workflows/ci.yml)
+[![CI](https://github.com/alpsgangster/Health-report/actions/workflows/ci.yml/badge.svg)](https://github.com/alpsgangster/Health-report/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)](#安装)
@@ -125,10 +125,10 @@ Apple 导出基本不带区间，所以大多数指标会落到内置人群表�
 
 ```bash
 # 推荐：从 git 装到隔离环境
-pipx install "git+https://github.com/alpsgangster/health-report"
+pipx install "git+https://github.com/alpsgangster/Health-report"
 
 # 或者克隆下来直接用，不装任何东西
-git clone https://github.com/alpsgangster/health-report
+git clone https://github.com/alpsgangster/Health-report
 cd health-report
 PYTHONPATH=src python -m health_report demo
 ```
@@ -147,7 +147,7 @@ health-report.cmd report "..\apple_health_export\导出.xml" -o 我的报告.md
 **不装也能跑**（自动退回标准库）：
 
 ```bash
-pipx install "health-report[fast] @ git+https://github.com/alpsgangster/health-report"
+pipx install "health-report[fast] @ git+https://github.com/alpsgangster/Health-report"
 ```
 
 ---
