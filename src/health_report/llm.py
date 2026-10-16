@@ -841,7 +841,8 @@ def _probe_command_override(command_override: str, prefer: str) -> Optional[Back
 
 
 def detect_backend(config: LLMConfig, prefer: str = "auto",
-                   command_override: str = "") -> Backend:
+                   command_override: str = "",
+                   allow_remote: bool = False) -> Backend:
     """挑一个 AI 解读后端。
 
     顺序（`prefer` 非法时抛 ValueError）：
@@ -861,18 +862,29 @@ def detect_backend(config: LLMConfig, prefer: str = "auto",
          `sends_to` 写厂商名、`is_local=False`；
       5. 都没有 → kind="none"。
 
-    `command_override`（CLI 的 `--ai-command`）用来指定一个**没进 PATH** 的可执行
-    文件路径，比如 `D:\\...\\resources\\runtime\\cli\\bin\\dsh.cmd`。此时：
-      * `prefer="auto"` / `"cli"`：只用这一个文件，不再探测别的；
-      * `prefer="dsh"/"claude"/"codex"`：以它为准，并按 `prefer` 决定子命令；
-      * `prefer="http"` / `"none"`：忽略覆盖（那是明确说了「不走 CLI」）；
-      * 认不出是哪个工具（例如路径叫 `my-agent.cmd`）→ 降级为 kind="none" 并记一条
-        不含路径细节的警告，**不会**去猜子命令。
+    ⚠️ **`prefer="auto"` 绝不会自动选中第 4 类（会外发的 CLI 工具）。**
 
-    ⚠️ 步骤 4 的后端**不是**本地模型：程序装在客户机器上，推理在厂商云端。
-    所以它们一律 `is_local=False`，`sends_to` 是 "DeepSeek" / "Anthropic" / "OpenAI"。
-    调用前请把 `sends_to` 显示给用户，这正是 `docs/PRIVACY.md` 那句
-    「发给谁由你定」所依赖的字段。
+    这是一条隐私上的硬约束，不是遗漏。第 4 类的程序虽然装在本机，**推理在厂商云端**：
+    用它就等于把你的健康摘要发给 DeepSeek / Anthropic / OpenAI。
+
+    早期版本让 auto 一路探测到底，后果是实测踩到的：客户机器上装了 DSH 时，
+    `health-report report 导出.xml`（**既没配 key、也没加 `--llm`**）会**静默地把摘要发出去**。
+    这与本项目的默认承诺「什么都不发出去」直接冲突——`docs/PRIVACY.md` 当时那张
+    「什么时候会联网」的表里，`report 文件` 那一行写的是"不"。
+
+    现在的分工是：
+
+    | `prefer` | 允许的后端 | 为什么 |
+    |---|---|---|
+    | `auto`（默认） | 环境变量配置的端点、**本机模型** | 前者是你显式配置 = 知情；后者不出本机 |
+    | `llm` / `cli` / `dsh` / `claude` / `codex` | 含会外发的 CLI 工具 | 你显式要求了 AI |
+
+    也就是说：**要外发，必须显式开口。** 本机模型不需要，因为它不出机器。
+
+    `command_override`（CLI 的 `--ai-command`）用来指定一个**没进 PATH** 的可执行
+    文件路径，比如 `D:\\...\\resources\\runtime\\cli\\bin\\dsh.cmd`。给了它本身
+    就是一种显式意图，所以 `prefer="auto"` 下也会采用（认不出是哪个工具时降级为
+    kind="none"，**不会**去猜子命令）。
     """
     normalized = _normalize_prefer(prefer)
     override = _probe_command_override(command_override, normalized)
@@ -888,8 +900,16 @@ def detect_backend(config: LLMConfig, prefer: str = "auto",
     if found is not None:
         base, name, model = found
         return _local_http_backend(name, base, model)
+    # 走到这里说明只有「会外发的 CLI 工具」可选。auto 不替用户做这个决定——
+    # 除非调用方明确说了 allow_remote（对应 CLI 的 --llm）。
     cli = _detect_cli()
-    return cli if cli is not None else _NO_BACKEND
+    if cli is not None and not cli.is_local:
+        if allow_remote:
+            return cli
+        _LOG.info("AI 解读：检测到本机已装的 %s（数据会发往 %s），"
+                  "但自动模式不会使用会外发的后端。要启用请加 --llm 或 "
+                  "--ai-backend dsh/claude/codex。", cli.name, cli.sends_to)
+    return _NO_BACKEND
 
 
 # ══════════════════════════════════════════════ 数字溯源校验（硬约束）
@@ -2142,7 +2162,8 @@ class NarrateResult:
 
 def narrate_ex(facts: Dict[str, Any], config: LLMConfig, *, lang: str = "zh",
                prefer: str = "auto", timeout: float = DEFAULT_CLI_TIMEOUT,
-               command_override: str = "") -> NarrateResult:
+               command_override: str = "",
+               allow_remote: bool = False) -> NarrateResult:
     """用自动挑选的后端生成解读，并对输出做**数字溯源硬校验**。
 
     流程：
@@ -2161,7 +2182,7 @@ def narrate_ex(facts: Dict[str, Any], config: LLMConfig, *, lang: str = "zh",
 
     `timeout` 只作用于 CLI 后端（HTTP 后端沿用 `config.timeout`）。
     """
-    backend = detect_backend(config, prefer, command_override)
+    backend = detect_backend(config, prefer, command_override, allow_remote)
     result = NarrateResult(backend=backend, model=backend.model)
     if backend.kind == "none":
         result.drop_reason = backend.detail

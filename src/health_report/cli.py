@@ -113,7 +113,8 @@ def cmd_report(args: argparse.Namespace) -> int:
 
     if prefer != "none":
         try:
-            backend = detect_backend(cfg, prefer, command_override)
+            backend = detect_backend(cfg, prefer, command_override,
+                                     allow_remote=bool(args.llm))
         except ValueError as e:
             print(f"[×] {e}", file=sys.stderr)
             return EXIT_USAGE
@@ -145,7 +146,8 @@ def cmd_report(args: argparse.Namespace) -> int:
             where = backend.sends_to or "未知"
             print(f"[i] 用「{backend.name}」生成解读中……（{backend.detail}）", file=sys.stderr)
             print(f"[i] 数据将发送至：{where}", file=sys.stderr)
-            res = narrate_ex(facts, cfg, prefer=prefer, command_override=command_override)
+            res = narrate_ex(facts, cfg, prefer=prefer, command_override=command_override,
+                             allow_remote=bool(args.llm))
             ai_text = res.text or ""
             if ai_text:
                 ai_model = backend.name + (f" / {res.model}" if res.model else "")

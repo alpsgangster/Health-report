@@ -106,6 +106,85 @@ class _EnvIsolated(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
 
+# ═══════════════════════════════════════════ auto 绝不自作主张把数据发出去
+
+
+class TestAutoNeverLeaksData(_EnvIsolated):
+    """`auto`（默认）不得自动选用**会离开本机**的后端。
+
+    这是一条**隐私默认值**，不是探测顺序问题，所以单独钉一组测试。
+
+    实测踩到：客户机器上装了 DSH 时，`health-report report 导出.xml`
+    （**既没配 key、也没加 `--llm`**）会静默把健康摘要发给 DeepSeek——
+    终端上确实打印了「数据将发送至：DeepSeek」，但对一个自称"隐私优先、
+    默认什么都不发出去"的工具来说，**默认静默外发是不能接受的**。
+    `docs/PRIVACY.md` 那张「什么时候会联网」的表里，`report 文件` 写的是"不"，
+    所以那条承诺必须由代码兑现，而不是靠用户去读探测顺序的文档。
+
+    分工：`auto` 只用**不出本机**的东西（本机模型）或者**用户已显式配置**的东西
+    （环境变量里的端点）；会外发的 CLI 工具必须显式开口（`--llm` 或
+    `--ai-backend dsh/claude/codex`）。
+    """
+
+    def _all_three_agents_available(self) -> None:
+        """三个 CLI agent 都装好、都有凭据——对 auto 来说诱惑最大。"""
+        find = mock.patch.object(llm, "_find_agent",
+                                 side_effect=lambda name: "/usr/local/bin/" + name)
+        creds = mock.patch.object(llm, "_agent_credential_state",
+                                  return_value=(True, "creds"))
+        find.start()
+        creds.start()
+        self.addCleanup(creds.stop)
+        self.addCleanup(find.stop)
+
+    def test_auto_refuses_a_cloud_cli_agent(self) -> None:
+        """三个 agent 全装好、全有凭据，auto 也必须放弃。"""
+        self._no_local_http()
+        self._all_three_agents_available()
+        backend = detect_backend(LLMConfig.from_env(), "auto")
+        self.assertEqual(backend.kind, "none",
+                         "auto 选中了会外发的后端，等于默认偷偷上传健康数据")
+        self.assertEqual(backend.sends_to, "不发送任何数据")
+
+    def test_allow_remote_is_what_unlocks_it(self) -> None:
+        """`--llm`（= allow_remote）才解锁。"""
+        self._no_local_http()
+        self._all_three_agents_available()
+        backend = detect_backend(LLMConfig.from_env(), "auto", "", allow_remote=True)
+        self.assertEqual(backend.kind, "cli")
+        self.assertEqual(backend.sends_to, "DeepSeek")
+
+    def test_explicit_prefer_needs_no_allow_remote(self) -> None:
+        """显式点名 `--ai-backend dsh` 本身就是同意，不用再叠 `--llm`。"""
+        self._no_local_http()
+        self._all_three_agents_available()
+        backend = detect_backend(LLMConfig.from_env(), "dsh")
+        self.assertEqual(backend.kind, "cli")
+        self.assertEqual(backend.sends_to, "DeepSeek")
+
+    def test_auto_still_uses_a_local_model(self) -> None:
+        """本机模型不出机器，所以 auto 照用——不能因为收紧而把它也挡掉。"""
+        with mock.patch.object(llm, "_probe_local_http", return_value="qwen2.5:7b"):
+            with mock.patch.object(llm, "_find_agent", return_value=r"C:\x\dsh.cmd"):
+                with mock.patch.object(llm, "_agent_credential_state", return_value=(True, "creds")):
+                    backend = detect_backend(LLMConfig.from_env(), "auto")
+        self.assertEqual(backend.kind, "http")
+        self.assertTrue(backend.is_local)
+        self.assertEqual(backend.sends_to, "本机（不出机器）")
+
+    def test_auto_still_uses_an_explicitly_configured_endpoint(self) -> None:
+        """环境变量里配了 key = 用户知情，auto 照用（这是原来的行为）。"""
+        self._no_local_http()
+        self._all_three_agents_available()
+        with mock.patch.object(llm, "_probe_local_http", return_value=None):
+            config = LLMConfig(api_key="sk-test", base_url="https://example.invalid/v1",
+                               model="m")
+            backend = detect_backend(config, "auto")
+        self.assertEqual(backend.kind, "http")
+        self.assertFalse(backend.is_local)
+        self.assertIn("example.invalid", backend.sends_to)
+
+
 # ═══════════════════════════════════════════════════ detect_backend 优先级
 
 
@@ -210,12 +289,16 @@ class TestDetectBackendPriority(_EnvIsolated):
         self.assertLess(elapsed, 0.6, "三个候选应当并发探测（实测 {0:.2f} 秒）".format(elapsed))
 
     def test_cli_beats_none_and_is_not_local(self) -> None:
-        """CLI agent 装在客户机器上，但模型在云端：is_local 必须是 False。"""
+        """CLI agent 装在客户机器上，但模型在云端：is_local 必须是 False。
+
+        用 `prefer="cli"` 显式指定——因为 `auto` **刻意不会**自动选用会外发的后端
+        （见 `TestAutoNeverLeaksData`）。这条测的是"选中之后的字段语义"。
+        """
         self._no_local_http()
         with mock.patch.object(llm, "_find_agent",
                                side_effect=lambda name: r"C:\x\bin\{0}.cmd".format(name) if name == "dsh" else ""):
             with mock.patch.object(llm, "_agent_credential_state", return_value=(True, "creds")):
-                backend = detect_backend(LLMConfig.from_env())
+                backend = detect_backend(LLMConfig.from_env(), "cli")
         self.assertEqual(backend.kind, "cli")
         self.assertEqual(backend.name, "DSH")
         self.assertFalse(backend.is_local)
@@ -224,7 +307,7 @@ class TestDetectBackendPriority(_EnvIsolated):
         self.assertIn("dsh.cmd", backend.detail)
 
     def test_cli_order_is_dsh_then_claude_then_codex(self) -> None:
-        """按 dsh → claude → codex 的顺序检测，先命中的先用。"""
+        """按 dsh → claude → codex 的顺序检测，先命中的先用（`prefer="cli"`）。"""
         calls = []
 
         def fake_find(name):
@@ -234,7 +317,7 @@ class TestDetectBackendPriority(_EnvIsolated):
         self._no_local_http()
         with mock.patch.object(llm, "_find_agent", side_effect=fake_find):
             with mock.patch.object(llm, "_agent_credential_state", return_value=(True, "creds")):
-                backend = detect_backend(LLMConfig.from_env())
+                backend = detect_backend(LLMConfig.from_env(), "cli")
         self.assertEqual(calls, ["dsh"])
         self.assertEqual(backend.name, "DSH")
 
@@ -242,7 +325,7 @@ class TestDetectBackendPriority(_EnvIsolated):
         with mock.patch.object(llm, "_find_agent",
                                side_effect=lambda n: "" if n == "dsh" else "/usr/local/bin/" + n):
             with mock.patch.object(llm, "_agent_credential_state", return_value=(True, "creds")):
-                backend = detect_backend(LLMConfig.from_env())
+                backend = detect_backend(LLMConfig.from_env(), "cli")
         self.assertEqual(calls, [])
         self.assertEqual(backend.name, "Claude Code")
         self.assertEqual(backend.sends_to, "Anthropic")
@@ -250,7 +333,7 @@ class TestDetectBackendPriority(_EnvIsolated):
         with mock.patch.object(llm, "_find_agent",
                                side_effect=lambda n: "/usr/local/bin/" + n if n == "codex" else ""):
             with mock.patch.object(llm, "_agent_credential_state", return_value=(True, "creds")):
-                backend = detect_backend(LLMConfig.from_env())
+                backend = detect_backend(LLMConfig.from_env(), "cli")
         self.assertEqual(backend.name, "Codex")
         self.assertEqual(backend.sends_to, "OpenAI")
 
@@ -265,7 +348,7 @@ class TestDetectBackendPriority(_EnvIsolated):
         self._no_local_http()
         with mock.patch.object(llm, "_find_agent", side_effect=fake_find):
             with mock.patch.object(llm, "_agent_credential_state", side_effect=fake_creds):
-                backend = detect_backend(LLMConfig.from_env())
+                backend = detect_backend(LLMConfig.from_env(), "cli")
         self.assertEqual(backend.name, "Claude Code")
         self.assertNotIn("未检测到", backend.detail)
 
@@ -275,7 +358,7 @@ class TestDetectBackendPriority(_EnvIsolated):
         with mock.patch.object(llm, "_find_agent",
                                side_effect=lambda name: r"C:\bin\{0}.cmd".format(name)):
             with mock.patch.object(llm, "_agent_credential_state", return_value=(False, r"C:\Users\x\.dsh")):
-                backend = detect_backend(LLMConfig.from_env())
+                backend = detect_backend(LLMConfig.from_env(), "cli")
         self.assertEqual(backend.kind, "cli")
         self.assertEqual(backend.name, "DSH")
         self.assertIn("未检测到已配置的模型凭据", backend.detail)

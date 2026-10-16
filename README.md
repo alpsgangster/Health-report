@@ -2,6 +2,8 @@
 
 **只靠你自己的 Apple 健康导出，在本机生成一份能逐条复核的健康报告。不联网、不上传、不需要 API key。**
 
+[English](README.en.md) ｜ 中文说明
+
 [![CI](https://github.com/alpsgangster/health-report/actions/workflows/ci.yml/badge.svg)](https://github.com/alpsgangster/health-report/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -250,22 +252,23 @@ Apple 的默认设备名带机主姓名（「某某的 Apple Watch」）。本�
 
 要完全不脱敏（仅本地调试）：`--show-source-names`。
 
-### AI 解读：四种后端，自动挑，并告诉你数据去哪
+### AI 解读：四种后端，**会自动挑，但绝不自动外发**
 
-AI 那一节是**可选**的（不开启报告也完整）。开启时**后端自动探测**，按这个顺序：
+AI 那一节是**可选**的（不开启报告也完整）。开启时后端自动探测，按这个顺序：
 
-| 顺序 | 后端 | 数据去哪 | 你要做什么 |
-|---|---|---|---|
-| 1 | 环境变量配置的**云端端点** | 你配的那个地址 | 填一个 API key |
-| 2 | **本机模型**（Ollama / LM Studio / llama.cpp） | **不出本机** | 启动它即可（默认探测 `127.0.0.1` 的 11434 / 1234 / 8080） |
-| 3 | **本机已装的 AI 工具**（DSH / Claude Code / Codex） | 对应厂商（DeepSeek / Anthropic / OpenAI） | 什么都不用做——复用你已有的登录 |
-| 4 | 都没有 | —— | 纯规则报告，文字偏机械但内容完整 |
+| 顺序 | 后端 | 数据去哪 | 自动采用？ | 你要做什么 |
+|---|---|---|---|---|
+| 1 | 环境变量配置的**云端端点** | 你配的那个地址 | ✅（配了就是知情） | 填一个 API key |
+| 2 | **本机模型**（Ollama / LM Studio / llama.cpp） | **不出本机** | ✅ | 启动它即可（默认探测 `127.0.0.1` 的 11434 / 1234 / 8080） |
+| 3 | **本机已装的 AI 工具**（DSH / Claude Code / Codex） | 对应厂商（DeepSeek / Anthropic / OpenAI） | ❌ **要显式开口** | `--llm` 或 `--ai-backend dsh` |
+| 4 | 都没有 | —— | —— | 纯规则报告，文字偏机械但内容完整 |
 
 ```bash
-health-report report 导出.xml                    # 自动挑（推荐）
-health-report report 导出.xml --ai-backend none  # 只要纯规则报告，完全不联网
-health-report report 导出.xml --ai-backend dsh   # 强制用本机装好的 DSH
-health-report report 导出.xml --no-llm           # 同上，完全不联网
+health-report report 导出.xml                     # 只会在「不出本机」或你已配置的后端里挑
+health-report report 导出.xml --llm               # 显式要 AI：这才解锁第 3 类（会外发）
+health-report report 导出.xml --ai-backend dsh    # 或直接点名
+health-report report 导出.xml --ai-backend none   # 只要纯规则报告，完全不联网
+health-report report 导出.xml --no-llm            # 同上
 ```
 
 云端端点也可以是任何 OpenAI 兼容服务：
@@ -277,8 +280,14 @@ export HEALTH_REPORT_MODEL="deepseek-chat"                    # 可选
 ```
 
 > ⚠️ **"本机装好的 AI 工具"不等于"模型在本地"。** DSH / Claude Code / Codex 是本地客户端，
-> 模型在云端——用它们等于把算好的摘要发给对应厂商。所以每次运行都会在终端打印
-> **「数据将发送至：<厂商>」**，让你随时知道数据去了哪。要真正不出本机，用第 2 种（本机模型）。
+> 模型在云端——用它们等于把算好的摘要发给对应厂商。所以**默认不会用它们**，
+> 需要你显式开启，而且每次运行都会在终端打印 **「数据将发送至：<厂商>」**。
+> 要真正不出本机，用第 2 种（本机模型）。
+>
+> 这条限制的由来：早期版本让自动探测一路走到底，结果在装了 DSH 的机器上，
+> `health-report report 导出.xml`（既没配 key、也没加 `--llm`）会**静默把摘要发出去**。
+> 默认静默外发对"隐私优先"来说是不能接受的，所以改成了显式开口。
+> 回归测试在 `tests/test_llm_backends.py::TestAutoNeverLeaksData`。
 
 ### 编造的数字进不了报告（硬校验）
 
