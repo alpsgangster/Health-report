@@ -52,6 +52,41 @@ class TestDemo(unittest.TestCase):
         self.assertEqual(code, cli.EXIT_OK)
         self.assertIn("HYDRATION_AMPLIFIES", stdout)
 
+    def test_demo_html_produces_the_client_facing_deliverable(self):
+        """`demo --html` 必须也能出 HTML —— 这是"30 秒看到长什么样"最该给的东西。
+
+        存在的理由：`--html` 一开始只加在 `report` 子命令上，于是想看 HTML 报告
+        得先去仓库里找合成导出再跑 `report examples/...`。而 `demo` 存在的全部
+        意义就是省掉这一步——**最该看到交付形态的入口反而看不到它**。
+        这是按"子命令"分类、而不是按"用户想干什么"分类留下的缺口。
+        """
+        html_path = os.path.join(self.tmp, "demo.html")
+        md_path = os.path.join(self.tmp, "demo.md")
+        code, stdout, stderr = run_cli("demo", "-o", md_path, "--html", html_path)
+        self.assertEqual(code, cli.EXIT_OK, stderr)
+        # 两份产物都要有：--html 是"另存一份"，不该顶掉 Markdown
+        self.assertTrue(os.path.exists(md_path), "给了 --html 就不写 Markdown 了")
+        self.assertTrue(os.path.exists(html_path))
+        self.assertIn("张图", stdout, "没告诉用户生成了多少张图")
+
+        html = open(html_path, encoding="utf-8").read()
+        self.assertGreater(len(html), 50_000, "HTML 太短，不像完整报告")
+        self.assertTrue(html.startswith("<!DOCTYPE html>"))
+        self.assertTrue(html.rstrip().endswith("</html>"))
+        self.assertIn("<svg", html, "一张图都没有")
+        self.assertNotIn("<script", html.lower())
+        for bad in ('src="http', "src='http", 'href="http', "href='http",
+                    "@import", "<link"):
+            self.assertNotIn(bad, html, f"HTML 里出现了外部引用：{bad}")
+
+    def test_demo_without_html_does_not_write_html(self):
+        """不给 `--html` 时行为必须和以前完全一样（不产生额外文件）。"""
+        md_path = os.path.join(self.tmp, "only.md")
+        code, stdout, stderr = run_cli("demo", "-o", md_path)
+        self.assertEqual(code, cli.EXIT_OK, stderr)
+        self.assertNotIn("HTML 版已写入", stdout)
+        self.assertEqual(sorted(os.listdir(self.tmp)), ["only.md"])
+
     def test_demo_default_output_path(self):
         cwd = os.getcwd()
         os.chdir(self.tmp)

@@ -327,6 +327,23 @@ def cmd_demo(args: argparse.Namespace) -> int:
     print("    这份数据是编的，用来演示报告结构与数据陷阱提示。")
     print("    换成你自己的数据：health-report report <你的导出文件> -o 报告.md")
     print("    想看全部规则命中情况：health-report demo --findings")
+
+    # ── `demo --html`：给「30 秒看到长什么样」补上客户交付形态那一步 ──
+    #
+    # 之前只有 `report` 子命令有 `--html`。于是"想看看 HTML 报告长什么样"必须
+    # 先去仓库里找一份合成导出、再跑 `report examples/...`——而 `demo` 存在的
+    # 全部意义就是省掉这一步。**最该看到交付形态的入口反而看不到它**，
+    # 这是实现时按"子命令"分类、而不是按"用户想干什么"分类留下的缺口。
+    if args.html:
+        html_text = build_html(ds, analysis, findings,
+                               ai_text="", ai_model="", ai_note="",
+                               title="健康数据报告（内置合成样例）",
+                               include_appendix=not args.no_appendix)
+        _write_text(args.html, html_text)
+        print(f"[√] HTML 版已写入 {os.path.abspath(args.html)}  "
+              f"({len(html_text) / 1024:.0f} KB / {html_text.count('<svg')} 张图)")
+        print("    用浏览器打开，Ctrl+P 即可另存为 PDF（打印时勾选「背景图形」）。")
+
     if args.findings:
         print("")
         print(f"{'严重度':<8}{'规则':<26}说明")
@@ -470,6 +487,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("demo", help="用内置合成数据生成一份示例报告（零配置）")
     p.add_argument("-o", "--out", default=None, help="输出路径（默认 out/demo_report.md）")
+    p.add_argument("--html", default=None, metavar="PATH",
+                   help="另存一份自包含 HTML（内联 SVG 图表，浏览器里打印即 PDF）")
     p.add_argument("--findings", action="store_true", help="额外打印全部命中的规则")
     p.add_argument("--no-appendix", action="store_true", help="不输出附录 B")
     p.set_defaults(func=cmd_demo)

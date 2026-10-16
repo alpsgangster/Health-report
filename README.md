@@ -158,6 +158,7 @@ pipx install "health-report[fast] @ git+https://github.com/alpsgangster/Health-r
 
 ```bash
 health-report demo                          # 用内置合成数据出一份完整报告
+health-report demo --html 示例报告.html       # 顺便出一份 HTML（浏览器打开，Ctrl+P 就是 PDF）
 health-report demo --findings               # 顺便打印命中了哪些规则
 health-report metrics                        # 列出支持的 77 个指标与内置参考区间
 health-report inputs                         # 说明支持哪些输入格式

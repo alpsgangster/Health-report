@@ -59,6 +59,16 @@ venv/
 Thumbs.db
 desktop.ini
 
+# HTML 报告是**产物**，不进仓库。
+#
+# 为什么：它是生成出来的，进仓库就会像 examples/expected_report.md 那样需要
+# 额外的 golden file 校验，而且 190 KB 的生成内容会随每次改动变脏。
+# 要给人看的那一份挂在 GitHub Release 的附件里（`v0.1.0` 的 example-report.html），
+# 那里能正常渲染/下载，比提交进仓库更合适。
+# 注意这条只挡仓库根目录，不影响 examples/ 下的合成样例（下面有例外规则）。
+/example-report.html
+/*-report.html
+
 # ── 例外：合成样例必须进仓库 ──────────────────────────────
 !examples/
 !examples/**

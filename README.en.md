@@ -178,6 +178,7 @@ pipx install "health-report[fast] @ git+https://github.com/alpsgangster/Health-r
 
 ```bash
 health-report demo                          # full report from the built-in synthetic data
+health-report demo --html example.html       # also write the HTML (open it, Ctrl+P gives you a PDF)
 health-report demo --findings               # also print which rules fired
 health-report metrics                       # list the 77 supported metrics and built-in reference ranges
 health-report inputs                        # explain which input formats are supported
