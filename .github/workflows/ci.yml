@@ -38,7 +38,27 @@ jobs:
       - name: 跑测试
         env:
           PYTHONPATH: src
-        run: python -m unittest discover -s tests -v
+        shell: bash
+        run: |
+          # 用 `set +e` + 显式取退出码，而不是让 bash 直接中断：
+          # 失败时要把**失败用例名**变成 GitHub 注解（::error::），这样失败原因
+          # 能直接从 check-run API 读到，不必去翻日志、也不必让人截图。
+          # （第一次 CI 红在 POSIX 上时就是这样：注解只有「exit code 1」，
+          # 完全看不出是哪个用例，白跑一轮。）
+          set +e
+          # `out/` 是 gitignore 的，全新 checkout 里没有这个目录 ——
+          # 不先建它，tee 会失败，CI 就因为一个无关原因变红。
+          mkdir -p out
+          python -m unittest discover -s tests -v 2>&1 | tee out/unittest.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then
+            echo "── 失败用例（已转成注解）"
+            grep -E "^(FAIL|ERROR): " out/unittest.log | sort -u | while IFS= read -r line; do
+              echo "::error::$line"
+            done
+            grep -A 12 -E "^(FAIL|ERROR): " out/unittest.log | head -120
+          fi
+          exit "$code"
 
       # 关键一步：确认「零配置、零密钥、零网络」也能产出完整报告。
       # 这是 README 里那句 30 秒承诺的可执行版本 —— 承诺失效 CI 就会红。
@@ -67,6 +87,8 @@ jobs:
         run: python tools/_check_html.py --no-real
 
       - name: HTML 确实是自包含的（无 JS、无外部引用）
+        env:
+          PYTHONPATH: src
         shell: bash
         run: |
           set -e

@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -502,6 +503,65 @@ class TestCommandOverride(_EnvIsolated):
         for path, expected in cases.items():
             with self.subTest(path=path):
                 self.assertEqual(llm._command_override_agent(path), expected)
+
+    def test_agent_recognition_does_not_depend_on_the_platform(self) -> None:
+        """识别 `--ai-command` 的路径**不能依赖 `os.path` 的平台行为**。
+
+        这是第一次跑 CI 时 7 个 POSIX job 全红的根因。原来的实现用
+        `os.path.basename(path)`：在 Linux/macOS 上分隔符是 `/`，于是
+        `basename(r"D:\\x\\bin\\dsh.cmd")` **把整条路径原样返回**，认不出这是 dsh。
+        后果是「用户显式指定的命令」被静默忽略、继续去探测 PATH——
+        在 Windows 上永远看不到（那边 basename 认得反斜杠），一到 POSIX 就炸。
+
+        用户手里的路径可能来自任何平台（配置、文档、脚本），所以两种分隔符都要认。
+        这里显式把 `os.path.basename` 换成 POSIX 实现来复现 Linux 行为——
+        不这么做，这条测试在 Windows 上永远是绿的，等于没测。
+        """
+        original = os.path.basename
+        os.path.basename = posixpath.basename      # 模拟 Linux/macOS
+        try:
+            for path, expected in (
+                (r"D:\x\bin\dsh.cmd", "dsh"),
+                (r"C:\Users\x\AppData\Local\claude.exe", "claude"),
+                (r"\\server\share\codex.bat", "codex"),
+                ("/usr/local/bin/dsh", "dsh"),
+                (r"D:\x\my-agent.cmd", ""),
+            ):
+                with self.subTest(path=path):
+                    self.assertEqual(llm._command_override_agent(path), expected)
+        finally:
+            os.path.basename = original
+
+    def test_unrecognised_override_does_not_fall_back_to_probing_path(self) -> None:
+        """给了 `--ai-command` 但认不出时，**不许**改去探测 PATH 找别的后端。
+
+        行为上的理由：用户显式说了「用这个命令」，静默换成别的后端
+        （例如本机装好的 DSH）违背他的意图——那正是 `--ai-command` 的意义。
+        这条在 CI 上是被 `_find_agent` 的副作用断言出来的，这里单独写明。
+        """
+        probed: List[str] = []
+
+        def record(name: str) -> str:
+            probed.append(name)
+            return ""
+
+        with mock.patch.object(llm, "_find_agent", side_effect=record):
+            backend = llm.detect_backend(llm.LLMConfig(),
+                                         command_override=r"D:\x\my-agent.cmd")
+        self.assertEqual(backend.kind, "none")
+        self.assertEqual(probed, [], "认不出 override 时不该去探测 PATH")
+
+    def test_override_is_ignored_when_prefer_says_no_cli(self) -> None:
+        """`--ai-command` 与 `--ai-backend http/none` 同时给：**以 prefer 为准**。
+
+        用户说了「不走 CLI」，那就忽略那个命令，而不是被它挡住。
+        """
+        for prefer in ("none", "http"):
+            with self.subTest(prefer=prefer):
+                backend = llm.detect_backend(llm.LLMConfig(), prefer,
+                                             r"D:\x\bin\dsh.cmd")
+                self.assertEqual(backend.kind, "none",
+                                 "prefer 说了不走 CLI，却仍然采用了 override")
 
     def test_narrate_ex_forwards_command_override(self) -> None:
         seen = {}

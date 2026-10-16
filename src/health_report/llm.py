@@ -802,10 +802,22 @@ def _command_override_agent(path: str, hint: str = "") -> str:
     认不出来就返回空串——调用方会降级成「无」，**不会**随便猜一个。
     （`hint` 是 `prefer`，比如用户同时给了 `--ai-command X --ai-prefer codex`
     这种显式指定，那就直接用 hint，不用猜。）
+
+    ⚠️ **不能用 `os.path.basename`**：它只认当前平台的分隔符。
+    在 Linux/macOS 上 `os.path.basename(r"D:\\x\\bin\\dsh.cmd")` 会把**整条路径**
+    原样返回（因为那里的分隔符是 `/`），于是认不出这是 dsh——用户显式指定的
+    命令被静默忽略，代码继续去探测 PATH。
+
+    这就是第一次跑 CI 时 7 个 POSIX job 全红的根因（4 个用例失败），
+    而 Windows 上全绿：**`os.path` 的行为随平台变，写成跨平台的自测就漏了。**
+    用户手里的路径可能来自任何平台（配置、文档、脚本），所以这里同时按
+    `/` 和 `\\` 切，与运行平台无关。
     """
     if hint in _CLI_AGENTS:
         return hint
-    base = os.path.basename(str(path or "")).strip().lower()
+    text = str(path or "").strip().strip('"').strip("'")
+    # 反斜杠与正斜杠都当分隔符：不依赖 os.path 的平台行为
+    base = text.replace("\\", "/").rsplit("/", 1)[-1].strip().lower()
     for ext in (".cmd", ".bat", ".exe", ".ps1", ".sh"):
         if base.endswith(ext):
             base = base[: -len(ext)]
@@ -890,6 +902,21 @@ def detect_backend(config: LLMConfig, prefer: str = "auto",
     override = _probe_command_override(command_override, normalized)
     if override is not None:
         return override
+
+    # `command_override` 给了、但没被采用（认不出是哪个工具）。这时怎么走取决于 prefer：
+    #   * `none` / `http`  → 用户明确说了不走 CLI，**忽略 override**，继续下面那条 prefer。
+    #   * `auto`           → **就此收手，不探测 PATH**。用户显式指定了「用这个命令」，
+    #                        静默换成别的后端（例如本机装好的 DSH）违背他的意图——
+    #                        这正是 `--ai-command` 存在的意义。契约有测试钉着：
+    #                        「给了 override 就不该再探测 PATH」。
+    #   * 其它显式 prefer   → 交回下面的显式分支（用户同时说了「走 CLI」和「用这个命令」）。
+    #
+    # 早期版本没有这一层，会继续往下探测。Windows 上侥幸没暴露
+    # （`os.path.basename` 认得反斜杠，override 总会命中），到了 Linux/macOS 上
+    # 立刻变成 4 个用例失败——**第一次跑 CI，7 个 POSIX job 全红就是这个原因**。
+    if str(command_override or "").strip() and normalized == "auto":
+        return _NO_BACKEND
+
     if normalized != "auto":
         backend = _explicit_backend(normalized, config)
         return backend if backend is not None else _NO_BACKEND
