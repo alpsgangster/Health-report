@@ -407,15 +407,19 @@ def _add_source_options(p: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="health-report",
-        description="把 Apple 健康导出与 InBody 报告，变成一份能复核的健康报告。本地优先，数据不出本机。",
+        description="只靠你自己的 Apple 健康导出，在本机生成一份能逐条复核的健康报告。"
+                    "不联网、不上传、不需要 API key。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="不知道该从哪开始？先跑 `health-report demo`。",
+        epilog="不知道该从哪开始？先跑 `health-report demo`。"
+               "\nWindows 上不想记 PYTHONPATH？直接跑仓库根目录的 health-report.cmd。",
     )
     ap.add_argument("--version", action="version", version=f"health-report {__version__}")
     sub = ap.add_subparsers(dest="command")
 
     p = sub.add_parser("report", help="解析输入并生成 Markdown 报告")
-    p.add_argument("inputs", nargs="+", help="输入文件：export.zip / export.xml / InBody CSV / 通用 CSV")
+    p.add_argument("inputs", nargs="+",
+                   help="输入文件：Apple 导出（export.zip / export.xml / apple_health_export/）"
+                        "是唯一必需的；体成分 CSV / 通用 CSV 可选")
     p.add_argument("-o", "--out", default=None, help="输出 Markdown 路径（默认打印到终端）")
     p.add_argument("--json", default=None, help="另存结构化事实 JSON（就是发给模型的那份内容）")
     p.add_argument("--llm", action="store_true", help="强制开启 AI 解读（没有可用后端就报错退出）")

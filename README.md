@@ -133,6 +133,16 @@ cd health-report
 PYTHONPATH=src python -m health_report demo
 ```
 
+**Windows 用户**：不用记 `PYTHONPATH`，仓库根目录有个启动器，双击或在 cmd 里直接跑：
+
+```cmd
+health-report.cmd demo
+health-report.cmd report "..\apple_health_export\导出.xml" -o 我的报告.md
+```
+
+它只做两件事：把 `src/` 加进 `PYTHONPATH`、把输出编码设成 UTF-8（不加这个，
+中文控制台遇到报告里的 🟠🔵 会报编码错）。**不需要 pip install。**
+
 可选加速：Apple 的 `export.xml` 有几 GB 时，`lxml` 会快好几倍。
 **不装也能跑**（自动退回标准库）：
 

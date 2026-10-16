@@ -1,0 +1,30 @@
+@echo off
+rem ---------------------------------------------------------------
+rem  health-report ????Windows?
+rem
+rem  ??????????
+rem      health-report demo
+rem      health-report report "..\apple_health_export\??.xml" -o ??.md
+rem
+rem  ?????????? src/ ?? PYTHONPATH???????? UTF-8?
+rem  **??? pip install**??????????????
+rem ---------------------------------------------------------------
+setlocal
+set "PYTHONPATH=%~dp0src"
+set "PYTHONIOENCODING=utf-8"
+
+where python >nul 2>nul
+if %errorlevel%==0 (
+  python -m health_report %*
+  exit /b %errorlevel%
+)
+
+where py >nul 2>nul
+if %errorlevel%==0 (
+  py -3 -m health_report %*
+  exit /b %errorlevel%
+)
+
+echo [x] ??? Python???? Python 3.9 ??????????? PATH ??
+echo     ??? https://www.python.org/downloads/
+exit /b 2

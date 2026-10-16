@@ -152,6 +152,17 @@ cd health-report
 PYTHONPATH=src python -m health_report demo
 ```
 
+**On Windows**, you do not have to remember `PYTHONPATH` — there is a launcher in the repository
+root. Double-click it, or run it from `cmd`:
+
+```cmd
+health-report.cmd demo
+health-report.cmd report "..\apple_health_export\export.xml" -o my-report.md
+```
+
+All it does is put `src/` on `PYTHONPATH` and set the output encoding to UTF-8 (without that,
+a Chinese console chokes on the 🟠🔵 characters in the report). **No `pip install` required.**
+
 Optional accelerator: for Apple's multi-GB `export.xml`, `lxml` is several times faster.
 **It runs without it too** (falling back to the standard library):
 
