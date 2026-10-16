@@ -1,0 +1,28 @@
+# 行尾统一策略。
+#
+# 为什么必须显式声明：CI 里有一步用 `cmp` **逐字节**比对 examples/ 与生成器的输出
+# （生成器写的是 LF）。而 GitHub 的 Windows runner 默认 core.autocrlf=true，
+# 检出时把 LF 转成 CRLF，于是 cmp 必然失败——第一次跑 CI 时 3 个 windows job
+# 全红就是这个原因（同一批 Linux/macOS job 是绿的，因为那边不转换）。
+#
+# 注意 `diff` 那一步没暴露问题：msys 的 diff 走文本模式，把 CRLF 与 LF 视为相同；
+# `cmp` 是按字节比的，所以只有它会红。**踩到的是"逐字节比对"这一步，不是内容错了。**
+#
+# 统一成「仓库里存 LF、任何平台检出也是 LF」之后，生成物在三个平台上逐字节一致。
+* text=auto eol=lf
+
+# ── 例外：Windows 批处理必须 CRLF ────────────────────────────
+# cmd.exe 对 LF-only 的 .cmd 在 goto/label 上会出问题（这是历史包袱，
+# 不是迷信）。health-report.cmd 是给 Windows 用户双击用的启动器，
+# 所以显式钉住 CRLF。
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# ── 二进制：不要做任何行尾或文本处理 ──────────────────────────
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.zip binary
+*.gpx binary
