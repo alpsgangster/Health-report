@@ -83,6 +83,49 @@ class TestReportCommand(unittest.TestCase):
         self.assertIn("这不是医学诊断", text)
         self.assertIn("规则层结论", text)
 
+    def test_html_flag_writes_a_self_contained_report(self):
+        """`--html` 出的是**自包含**文档：无外部资源、无 JS、A4 分页齐备。
+
+        "自包含"是这条交付形态的全部意义：客户拿到一个文件，双击就能在浏览器里
+        打印成 PDF，不需要联网、不需要别的资源、不需要装东西。
+        所以这里不只断言"有 HTML"，而是断言**没有任何外部引用**——
+        一旦有人往模板里加了个 CDN 字体或 `<script src>`，这条测试就该红。
+        """
+        html_path = os.path.join(self.tmp, "r.html")
+        md_path = os.path.join(self.tmp, "r.md")
+        code, _, stderr = run_cli("report", self.csv, self.xml, "--no-llm",
+                                  "-o", md_path, "--html", html_path)
+        self.assertEqual(code, cli.EXIT_OK, stderr)
+        text = open(html_path, encoding="utf-8").read()
+
+        self.assertTrue(text.startswith("<!DOCTYPE html>"))
+        self.assertTrue(text.rstrip().endswith("</html>"))
+
+        # 无 JS（打印不需要它；静态标签在纸上更可靠）
+        self.assertNotIn("<script", text.lower())
+        # 无外部资源。注意：SVG 的 xmlns="http://www.w3.org/2000/svg" 是**命名空间
+        # 标识符**，不会被网络请求，所以不能一概禁止 http:// ——要看的是"引用"。
+        for pattern in ('src="http', "src='http", 'href="http', "href='http",
+                        "@import", "<link"):
+            self.assertNotIn(pattern, text, f"HTML 里出现了外部引用：{pattern}")
+
+        # 有图，且打印分页规则在
+        self.assertIn("<svg", text)
+        self.assertIn("@page", text)
+        # 两份交付物必须说同一句话（判定措辞来自同一套助手）
+        md = open(md_path, encoding="utf-8").read()
+        for phrase in ("这不是医学诊断", "规则层结论"):
+            self.assertIn(phrase, md)
+            self.assertIn(phrase, text)
+
+    def test_html_alone_does_not_dump_markdown(self):
+        """只给 `--html` 时不要往终端倒 20 多 KB 的 Markdown。"""
+        html_path = os.path.join(self.tmp, "only.html")
+        code, stdout, stderr = run_cli("report", self.csv, "--no-llm", "--html", html_path)
+        self.assertEqual(code, cli.EXIT_OK, stderr)
+        self.assertNotIn("# 健康数据报告", stdout, "Markdown 正文被倒进了终端")
+        self.assertIn("未写 Markdown", stdout)
+
     def test_report_with_json_dump(self):
         facts_path = os.path.join(self.tmp, "facts.json")
         code, _, stderr = run_cli("report", self.csv, "--no-llm",

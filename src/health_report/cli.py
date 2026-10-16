@@ -27,6 +27,7 @@ from .model import Dataset
 from .parsers import parse_path
 from .pitfalls import check
 from .report import build_facts, build_report
+from .html import build_html
 
 EXIT_OK = 0
 EXIT_USAGE = 2
@@ -185,7 +186,31 @@ def cmd_report(args: argparse.Namespace) -> int:
     md = build_report(ds, analysis, findings, ai_text=ai_text, ai_model=ai_model,
                       title=args.title, include_appendix=not args.no_appendix,
                       ai_note=ai_note)
-    _emit(md, args.out)
+
+    # ── HTML 交付形态（打印即 PDF）──────────────────────────
+    #
+    # 这是给客户的形态：自包含、内联 SVG 图表、A4 分页、零外部资源、零 JS。
+    # 与 Markdown 版共用同一套口径助手（判定措辞、区间标注、来源列），
+    # 所以两份产物说的是同一句话。
+    if args.html:
+        html_text = build_html(
+            ds, analysis, findings,
+            ai_text=ai_text, ai_model=ai_model, ai_note=ai_note,
+            title=args.title, include_appendix=not args.no_appendix,
+            # 解析器默认已脱敏；这里再保一道，且跟随 --show-source-names
+            mask_sources=not bool(getattr(args, "show_source_names", False)),
+        )
+        _write_text(args.html, html_text)
+        svg = html_text.count("<svg")
+        print(f"[√] HTML 报告已写入 {os.path.abspath(args.html)}  "
+              f"({len(html_text) / 1024:.0f} KB / {svg} 张图)")
+
+    if args.out or not args.html:
+        _emit(md, args.out)
+    else:
+        # 给了 --html 又没给 -o：说明要的就是 HTML 交付物，
+        # 把 20 多 KB 的 Markdown 倒到终端没有意义。要两份就显式加 -o。
+        print("[i] 未写 Markdown（要同时要 Markdown 请加 -o 报告.md）")
     return EXIT_OK
 
 
@@ -421,6 +446,8 @@ def build_parser() -> argparse.ArgumentParser:
                    help="输入文件：Apple 导出（export.zip / export.xml / apple_health_export/）"
                         "是唯一必需的；体成分 CSV / 通用 CSV 可选")
     p.add_argument("-o", "--out", default=None, help="输出 Markdown 路径（默认打印到终端）")
+    p.add_argument("--html", default=None, metavar="PATH",
+                   help="另存一份自包含 HTML 报告（内联 SVG 图表，浏览器里打印即 PDF）")
     p.add_argument("--json", default=None, help="另存结构化事实 JSON（就是发给模型的那份内容）")
     p.add_argument("--llm", action="store_true", help="强制开启 AI 解读（没有可用后端就报错退出）")
     p.add_argument("--no-llm", action="store_true", help="强制关闭 AI 解读，完全不联网")

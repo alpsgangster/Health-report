@@ -1197,10 +1197,29 @@ def _use_activity_summary(rows: Sequence[Dict[str, Any]], ds: Dataset) -> None:
 # ──────────────────────────────────────────────────────────── 总览
 
 
+def _date_only(ts: str) -> str:
+    """把 `2019-07-28 09:49:19` 降级成 `2019-07-28`。
+
+    ⚠️ 为什么必须降级：`first_ts` / `last_ts` 是**首末两条原始 Record 的时间戳**。
+    它们会随这条 note 一起进入报告和发给模型的 `facts` 摘要——而
+    `docs/PRIVACY.md` 明确承诺 facts「不包含时间戳级别的细节（只有日期）」。
+
+    实际泄漏的东西：你**第一次**和**最后一次**记录健康数据的那个精确分钟。
+    比 GPS 轻得多，但它属于逐条记录级别的东西，报告又是天然要分享的，
+    所以按承诺只留日期——跨度信息一点没少。
+
+    （这条是 HTML 报告那边先发现的：它单独在输出层打了补丁。补丁应该是
+    在**源头**打，否则 Markdown 版和 facts 仍然漏——已实测确认它们确实漏了。）
+    """
+    text = str(ts or "").strip()
+    return text.split(" ")[0].split("T")[0] if text else ""
+
+
 def _write_summary(ds: Dataset, path: str, n_records: int, n_workouts: int,
                    first_ts: str, last_ts: str, n_correlations: int,
                    seen_types: Counter, unknown_apples: set) -> None:
-    span = f"{first_ts} → {last_ts}" if first_ts else "（没有带时间戳的记录）"
+    first_day, last_day = _date_only(first_ts), _date_only(last_ts)
+    span = f"{first_day} → {last_day}" if first_day else "（没有带时间戳的记录）"
     metrics = sorted(ds.metric_ids())
     ds.add_note(
         f"Apple 健康数据总览：原始 Record {n_records} 条，聚合后 {len(ds.observations)} 条观测，"

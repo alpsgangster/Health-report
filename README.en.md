@@ -202,7 +202,42 @@ health-report report export.zip --llm
 
 # Package exactly what would be sent to a model, and check it yourself first
 health-report report export.zip --json facts.json --no-llm
+
+# The client-facing form: a self-contained HTML report (inline SVG charts) — print it to PDF
+health-report report export.zip --html my-report.html
 ```
+
+### The HTML report: printing it *is* the PDF
+
+`--html` writes a **self-contained single-file** HTML report: inline CSS, **hand-written SVG
+charts**, **no external resources, no JavaScript**. Open it in a browser, press `Ctrl+P`, and
+"Save as PDF" — that is the finished deliverable.
+
+- **Nine sections**: cover / data-credibility notes / metric overview / sleep / recovery and load /
+  associations between metrics / activity and training / rule-layer conclusions / AI interpretation
+  (optional), plus the method and full-detail appendices
+- **Every chart is hand-written SVG.** No plotting dependency is pulled in — "zero dependencies" is
+  the selling point of this project and drawing a chart is not a good reason to break it:
+  - monthly-median trend line with an **interquartile band**; reference ranges change *line style*
+    by kind (`range` solid box / `screen` dashed box / `goal` a dotted line at the target only)
+  - **device-handover markers**: the switch dates from `handovers` are drawn as vertical dashed
+    lines labelled with the old and new device names
+  - sleep-stage composition, a sleep-regularity scatter (axis labels restored to clock times),
+    association comparison bars, steps against the goal, data coverage, and a check-up style
+    verdict strip
+- **Down-sampling and aggregation**: six years of data are aggregated by month (1,910 days → 79
+  monthly points); scatters above 1,200 points are evenly sampled and the caption says so — it never
+  tries to draw 2,600 points
+- **Readable in black and white**: every piece of information also has text or a line style, never
+  colour alone; "difference within noise" uses hatching, and "goal not met" is visually distinct
+  from "outside the range"
+- Fast: for a real six-year export the HTML step takes **0.07 s** (parsing is the 33-second part)
+
+> ⚠️ When printing, **enable "Background graphics"**, otherwise the browser drops the pale
+> backgrounds and hatching (that is a browser print option; CSS cannot force it). For page numbers,
+> use the browser's **Headers and footers** option — `@page` margin boxes with `counter(page)` are
+> only rendered by paging engines such as Prince/WeasyPrint, and Chrome/Edge ignore them. We do not
+> pretend to have page numbers.
 
 ### Apple's multi-device records are not silently double-counted
 
@@ -411,7 +446,7 @@ endocrine-related symptoms, **see a doctor**; do not substitute this tool's expl
 - [x] **v0.1** Apple Health + body-composition CSV + generic CSV; 77-metric catalog; 13 data-pitfall rules; Markdown report; optional AI interpretation (four backends + hard numeric provenance check)
 - [x] Sleep regularity (standard deviation of the sleep midpoint) and cross-metric associations (sleep → next-day recovery, training days vs. non-training days)
 - [x] Device-handover detection (cross-device comparability)
-- [ ] **HTML report + inline SVG trend charts**, printable to PDF straight from the browser (if that means pulling in a plotting dependency, we will first work out how not to break "zero dependencies")
+- [x] **HTML report + inline SVG trend charts**, printable to PDF straight from the browser (zero dependencies, zero JS, self-contained single file)
 - [ ] A portable, install-free exe (a small tkinter window to pick files → get a report) for people who do not install Python
 - [ ] English report output (`build_report` already takes a `lang` argument; only Chinese is implemented)
 - [ ] Device-formula forensics (e.g. reverse-engineering Katch-McArdle from lean mass to verify a device's BMR)

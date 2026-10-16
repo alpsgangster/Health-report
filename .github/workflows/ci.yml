@@ -56,6 +56,32 @@ jobs:
           grep -q "规则层结论" out/demo_report.md
           echo "demo 报告 $(wc -c < out/demo_report.md) 字节"
 
+      # HTML 是给客户的交付形态（自包含单文件、打印即 PDF）。
+      # 用 --no-real 走合成数据：约 0.02 秒，不需要真实导出。
+      # 它守的是"自包含"这件事本身：没有 <script>、没有外部引用、
+      # 每个 <svg> 都能被 XML 解析、空数据不留半张空图、无 NaN/None 泄漏。
+      # 不加这一步，HTML 模板的腐化会一直到有人打开报告才被发现。
+      - name: HTML 交付物自检（合成数据）
+        env:
+          PYTHONPATH: src
+        run: python tools/_check_html.py --no-real
+
+      - name: HTML 确实是自包含的（无 JS、无外部引用）
+        shell: bash
+        run: |
+          set -e
+          python -m health_report report examples/inbody_sample.csv \
+            --no-llm --html out/demo.html -o out/demo_html.md >/dev/null
+          test -s out/demo.html
+          for bad in '<script' '@import' '<link'; do
+            if grep -qF "$bad" out/demo.html; then
+              echo "::error::HTML 里出现了外部资源或脚本：$bad"
+              exit 1
+            fi
+          done
+          grep -q '<svg' out/demo.html
+          echo "HTML $(wc -c < out/demo.html) 字节，$(grep -o '<svg' out/demo.html | wc -l) 张图"
+
       # 确认没有 API key 时绝不联网、也绝不失败。
       # 这里故意给一个假 key，验证 --no-llm 能压住它。
       # 注意：不能把产物写到 /tmp —— Windows runner 上 Python 会把 "/tmp" 解析成
