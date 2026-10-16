@@ -22,9 +22,9 @@ jobs:
             extras: "fast"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -190,7 +190,7 @@ jobs:
     name: 隐私守卫
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: 检查是否误提交了真实数据文件
         shell: bash
         run: |

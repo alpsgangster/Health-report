@@ -474,4 +474,11 @@ PYTHONPATH=src python tools/_check_analysis.py           # end-to-end self-check
 
 ## License
 
-[MIT](LICENSE). Please also read the **NOT MEDICAL ADVICE** paragraph at the end of the LICENSE.
+The code is [MIT](LICENSE).
+
+**Please also read [DISCLAIMER.md](DISCLAIMER.md)** — this tool is not a medical device.
+It produces descriptive summaries of measurements, not medical advice.
+
+(The disclaimer is deliberately a separate file rather than an appendix to the LICENSE:
+GitHub matches a repository's licence by comparing the whole file against known texts,
+and the extra section made it fail to recognise MIT and show the repository as "Other".)

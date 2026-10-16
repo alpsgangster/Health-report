@@ -422,4 +422,10 @@ PYTHONPATH=src python tools/_check_analysis.py           # 端到端自检脚本
 
 ## 许可
 
-[MIT](LICENSE)。同时请读一下 LICENSE 结尾的 **NOT MEDICAL ADVICE** 一段。
+代码是 [MIT](LICENSE)。
+
+**但请一定读一下 [DISCLAIMER.md](DISCLAIMER.md)**——这个工具不是医疗器械，
+它给出的是对测量值的描述性汇总，不是医学建议。
+
+（免责声明刻意独立成一个文件而不是附加在 LICENSE 后面：GitHub 的许可证识别
+是按整个文件匹配已知协议的，附加内容会让它认不出 MIT、把仓库标成 "Other"。）
