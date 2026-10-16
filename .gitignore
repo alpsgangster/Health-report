@@ -1,0 +1,65 @@
+# ─────────────────────────────────────────────────────────────
+#  隐私优先：默认忽略一切真实健康数据。
+#  只放行 examples/ 下的合成样例（README 里有说明）。
+# ─────────────────────────────────────────────────────────────
+
+# Apple 健康导出（含 GPS 轨迹，最敏感）
+export.xml
+export_cda.xml
+导出.xml
+apple_health_export/
+workout-routes/
+*.gpx
+*.zip
+
+# 解析产物
+out/
+output/
+*.report.md
+apple_health_csv/
+_parsed/
+_gen_examples/
+err.txt
+
+# 自检脚本的中间产物（每次都重新生成，不进仓库）
+tools/_check_*.md
+
+# 体检 / 体成分原始报告
+InBody*.csv
+InBody*.png
+InBody*.jpg
+InBody*.jpeg
+InBody*.pdf
+体测*.csv
+体测*.png
+体测*.pdf
+
+# 密钥
+.env
+.env.*
+*.key
+secrets.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── 例外：合成样例必须进仓库 ──────────────────────────────
+!examples/
+!examples/**
+!tools/make_sample_data.py

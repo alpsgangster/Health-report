@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.9", "3.11", "3.13"]
+        include:
+          # 额外跑一遍装了 lxml 的快路径
+          - os: ubuntu-latest
+            python-version: "3.12"
+            extras: "fast"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 安装（核心零依赖）
+        run: python -m pip install --upgrade pip
+
+      - name: 安装（含 lxml 快路径）
+        if: matrix.extras == 'fast'
+        run: python -m pip install lxml
+
+      - name: 跑测试
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests -v
+
+      # 关键一步：确认「零配置、零密钥、零网络」也能产出完整报告。
+      # 这是 README 里那句 30 秒承诺的可执行版本 —— 承诺失效 CI 就会红。
+      - name: 端到端 demo（零配置）
+        env:
+          PYTHONPATH: src
+        run: python -m health_report demo -o out/demo_report.md --findings
+
+      - name: 校验 demo 报告确实有内容
+        shell: bash
+        run: |
+          set -e
+          test -s out/demo_report.md
+          grep -q "这不是医学诊断" out/demo_report.md
+          grep -q "规则层结论" out/demo_report.md
+          echo "demo 报告 $(wc -c < out/demo_report.md) 字节"
+
+      # 确认没有 API key 时绝不联网、也绝不失败。
+      # 这里故意给一个假 key，验证 --no-llm 能压住它。
+      # 注意：不能把产物写到 /tmp —— Windows runner 上 Python 会把 "/tmp" 解析成
+      # 当前盘符下的路径，而 git bash 的 /tmp 在别处，`test -s` 必然失败。
+      - name: --no-llm 时即使有 key 也不联网
+        env:
+          PYTHONPATH: src
+          HEALTH_REPORT_API_KEY: "sk-fake-must-not-be-used"
+        shell: bash
+        run: |
+          set -e
+          python -m health_report report examples/inbody_sample.csv --no-llm \
+            -o out/nollm.md 2> err.txt
+          # ⚠️ 这里匹配的是**开启 AI 时真正会打印的**那几句话。
+          # 早先只匹配 "生成 AI 解读"，而开启时的提示已经改成了
+          # 「用「DSH」生成解读中……」和「数据将发送至：…」——于是这个守卫
+          # 变成了永远为真的空检查（改了措辞却没改守卫，是很典型的失效方式）。
+          if grep -qE "生成解读中|数据将发送至|生成 AI 解读" err.txt; then
+            echo "::error::--no-llm 仍然尝试联网"
+            cat err.txt
+            exit 1
+          fi
+          test -s out/nollm.md
+          # 反向断言：报告里必须**明说**没有生成 AI 解读，而不是留白让人猜
+          grep -q "没有生成 AI 解读" out/nollm.md
+          echo "--no-llm 未触发任何联网尝试，且报告里已说明。"
+
+      - name: 确认合成示例文件与生成器一致
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -e
+          python -m health_report sample-data -o _gen_examples >/dev/null
+          ls -l _gen_examples
+          test -s _gen_examples/inbody_sample.csv
+          test -s _gen_examples/apple_export_sample.xml
+          # 生成器必须与仓库里提交的 examples/ 保持一致（否则示例会悄悄过期）
+          cmp _gen_examples/inbody_sample.csv examples/inbody_sample.csv
+          cmp _gen_examples/apple_export_sample.xml examples/apple_export_sample.xml
+          echo "examples/ 与生成器一致。"
+
+      - name: demo 报告与提交的 examples/expected_report.md 一致（golden file）
+        env:
+          PYTHONPATH: src
+        shell: bash
+        run: |
+          set -e
+          python -m health_report demo -o out/demo_golden.md >/dev/null
+          # 报告首行含生成时间，天然每次不同 —— 比对前剔掉它。
+          # 其余 400 多行必须逐字一致：报告是本项目的门面输出，
+          # 任何未被察觉的措辞漂移都应该让 CI 红。
+          grep -v '^生成时间：' out/demo_golden.md > out/golden.norm
+          grep -v '^生成时间：' examples/expected_report.md > out/committed.norm
+          if ! diff -u out/committed.norm out/golden.norm; then
+            echo "::error::demo 报告与 examples/expected_report.md 不一致：请重新生成并提交"
+            exit 1
+          fi
+          echo "demo 报告与提交版本一致（$(wc -l < out/golden.norm) 行）。"
+
+  lint-guard:
+    # 一个便宜但重要的守卫：仓库里不允许出现真实健康数据。
+    name: 隐私守卫
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: 检查是否误提交了真实数据文件
+        shell: bash
+        run: |
+          set -e
+          bad=$(git ls-files | grep -Ei '\.(zip|gpx)$|(^|/)export\.xml$|(^|/)workout-routes/|^InBody.*\.(csv|png|pdf)$' || true)
+          if [ -n "$bad" ]; then
+            echo "::error::检测到疑似真实健康数据被提交："
+            echo "$bad"
+            echo "这些都应当被 .gitignore 挡住。如果是 examples/ 下的合成数据，请确认文件名不匹配上述模式。"
+            exit 1
+          fi
+          echo "未发现被提交的真实数据文件。"

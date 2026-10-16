@@ -1,0 +1,8 @@
+"""让 `python -m health_report` 等价于 `health-report`。"""
+
+from __future__ import annotations
+
+from .cli import main
+
+if __name__ == "__main__":
+    raise SystemExit(main())
